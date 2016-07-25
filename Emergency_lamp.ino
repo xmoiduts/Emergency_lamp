@@ -1,5 +1,6 @@
 //辣鸡Arduino IDE
 //Scrappy Arduino IDE
+//To do : 改写IR pin 相关代码
 #include <Adafruit_NeoPixel.h>
 #ifdef __AVR__
 #include <avr/power.h>
@@ -7,13 +8,15 @@
 #include <avr/wdt.h>
 #include <avr/sleep.h>
 
-#define PIN 6
+#define PIN 11							//NeoPixel Pin
+#define IR_PIN A3						//IR sensor Pin
+#define NEO_SWITCH 12
 #define NUM_LEDS 4
 #define BRIGHTNESS 255
 
-#define DARKER_TO_IGNITE 150   			//When light value **falls** below this value , lamp will light up ;
-#define LIGHTER_TO_SHUTDOWN_INIT 250	//When light value **rises** above this value , lamp will turn off ;
-#define TOLERANCE_RANGE 30 
+#define DARKER_TO_IGNITE 350   			//When light value **falls** below this value , lamp will light up ;
+#define LIGHTER_TO_SHUTDOWN_INIT 450	//When light value **rises** above this value , lamp will turn off ;
+#define TOLERANCE_RANGE 15 
 int LIGHTER_TO_SHUTDOWN = LIGHTER_TO_SHUTDOWN_INIT ;
 
 
@@ -53,6 +56,7 @@ public:
 
   }//A procedure when lamp is on , the lamp will show red->orange->yellow->warm white->white , depending on which output level it is when triggering this METHOD.
   else {
+	  digitalWrite(NEO_SWITCH, HIGH);//ctrl pin
    for (int i = 0; i < 256; i++) {
     for (int j = 0; j < 4; j++) {
      strip.setPixelColor(j, strip.Color(i*k_red, i*k_green, i*k_blue));
@@ -64,7 +68,7 @@ public:
    cur_green = 255 * k_green;
    cur_blue = 255 * k_blue;
    stat = 1;
-   LIGHTER_TO_SHUTDOWN = max(analogRead(A0)+TOLERANCE_RANGE,LIGHTER_TO_SHUTDOWN_INIT);
+   LIGHTER_TO_SHUTDOWN = max(1023-analogRead(A0)+TOLERANCE_RANGE,LIGHTER_TO_SHUTDOWN_INIT);
   }//A procedure to light up the lamp when lamp is off ,lamp shows dark->light gradually , after that , lamp gets a new LIGHTER_TO_SHUTDOWN lightvalue in order not to loop from lightup-shutdown-lightup-shutdown......
   ttl = 40;
  }
@@ -88,9 +92,12 @@ public:
     cur_red = 0;
   }   
   
-  if (cur_red == 0)
-   stat = 0;    
-  LIGHTER_TO_SHUTDOWN = LIGHTER_TO_SHUTDOWN_INIT;// Auto reload 
+  if (cur_red == 0) {
+	  stat = 0;
+	  LIGHTER_TO_SHUTDOWN = LIGHTER_TO_SHUTDOWN_INIT;// Auto reload 
+	  delay(2);
+	  digitalWrite(NEO_SWITCH, LOW);
+  }//dim to full dark
 
   for (int j = 0; j < 4; j++) {
    strip.setPixelColor(j, strip.Color(cur_red, cur_green, cur_blue));
@@ -105,6 +112,8 @@ public:
   }
   strip.show();
   LIGHTER_TO_SHUTDOWN = LIGHTER_TO_SHUTDOWN_INIT;
+  delay(2);
+  digitalWrite(NEO_SWITCH, LOW);
  }//shutdown this light
 };
 
@@ -121,37 +130,63 @@ char bitmap = 0b00000000;//abandoned
 
 void setup()
 {
- //Serial.begin(115200);
- pinMode(A0, INPUT);
- pinMode(2, INPUT);
- pinMode(13, OUTPUT);
- lamp1.strip.setBrightness(BRIGHTNESS);
- lamp1.strip.begin();
- lamp1.strip.show(); 
- setTime(5);
+	Serial.begin(115200);
 
- /*Energy saver using WDT */
- ACSR |= _BV(ACD);//OFF ACD
- //ADCSRA = 0;//OFF ADC
+	pinMode(A0, INPUT_PULLUP);
+	pinMode(2, INPUT);
+	pinMode(NEO_SWITCH, OUTPUT);
+	pinMode(PIN, INPUT_PULLUP);
+	pinMode(13, OUTPUT);
+	digitalWrite(NEO_SWITCH, LOW);
+	lamp1.strip.setBrightness(BRIGHTNESS);
+	lamp1.strip.begin();
+	lamp1.strip.show(); 
+	/*Energy saver using WDT */
+	//setTime(5);//配置每秒2次的中断唤醒
+
+	
+	//ACSR |= _BV(ACD);//OFF ACD
 }
 
 void loop()
 { 
+	
+	//ADCSRA = 1;
+	/********业务代码开始*********/ 
+	getSensors();
+	//Serial.println("Loop");
+	generateBitmap();
+	outputStat();
+	delay(2);
+	updateStrip(); 
+	/********业务代码结束*********/
+	/**********节能器*************/
+	
+	//ADCSRA = 0;										// disable ADC	
+	MCUSR = 0;										// clear various "reset" flags	
+	WDTCSR = bit(WDCE) | bit(WDE);					// allow changes, disable reset
+	// set interrupt mode and an interval 
+	WDTCSR = bit(WDIE) | bit(WDP2) | bit(WDP0);		// set WDIE, and 8 seconds delay
+	wdt_reset();									// pat the dog
 
- powerdown_avr();
- //unsigned long prevMicros = micros();
- getSensors();
- //generateBitmap();
- //outputStat();
- updateStrip(); 
- //Serial.println(micros() - prevMicros);
- //delay(10);//Wait for Serial to finish its work
- 
+	set_sleep_mode(SLEEP_MODE_PWR_DOWN);
+	noInterrupts();									// timed sequence follows
+	sleep_enable();
+
+	// turn off brown-out enable in software
+	MCUCR = bit(BODS) | bit(BODSE);
+	MCUCR = bit(BODS);
+	interrupts();									// guarantees next instruction executed
+	sleep_cpu();
+
+	// cancel sleep as a precaution
+	sleep_disable();
+	/*********节能器结束**********/
 }
 
 void getSensors() {
  lightValue[1] = lightValue[0];
- lightValue[0] = analogRead(A0);//stores last two loop 's light value for calculating flag , rise and drop.
+ lightValue[0] = 1023-analogRead(A0);//stores last two loop 's light value for calculating flag , rise and drop.
  if (flag == 0) {
   if (lightValue[0]<DARKER_TO_IGNITE && lightValue[1]>DARKER_TO_IGNITE) {
    flag = 1;
@@ -174,7 +209,7 @@ void getSensors() {
    rise = 0;
   }
  }
- IR = digitalRead(2);
+ IR = digitalRead(IR_PIN);
 }//calculate new values of lightValue,flag,rise,drop,IR.
 
 /*
@@ -272,5 +307,6 @@ void powerdown_avr() {
  sleep_mode();                        // System sleeps here
 }
 ISR(WDT_vect) {
+	wdt_disable();  // disable watchdog
 }
 
