@@ -7,7 +7,7 @@
 #include <avr/wdt.h>
 #include <avr/sleep.h>
 
-#define PIN 11							//NeoPixel Pin
+#define PIN 11							//NeoPixel data Pin
 #define IR_PIN A3						//IR sensor Pin
 #define NEO_SWITCH 12
 #define NUM_LEDS 4
@@ -127,17 +127,22 @@ char bitmap = 0b00000000;//abandoned
 
 void setup()
 {
-	Serial.begin(115200);
+	//Serial.begin(115200);
 
-	pinMode(A0, INPUT_PULLUP);
-	pinMode(2, INPUT);
-	pinMode(NEO_SWITCH, OUTPUT);
-	pinMode(PIN, INPUT_PULLUP);
-	pinMode(13, OUTPUT);
+	pinMode(A0, INPUT_PULLUP);//light
+	pinMode(IR_PIN,INPUT_PULLUP);
+	pinMode(NEO_SWITCH, OUTPUT);//neo power
+	pinMode(PIN, INPUT);//neo data
+	//pinMode(13, OUTPUT);
+	
+	digitalWrite(IR_PIN, LOW);
 	digitalWrite(NEO_SWITCH, LOW);
+
 	lamp1.strip.setBrightness(BRIGHTNESS);
 	lamp1.strip.begin();
 	lamp1.strip.show();
+	delay(1);
+	digitalWrite(PIN, HIGH);//reduce neopixel idle current.
 	/*Energy saver using WDT */
 	//setTime(5);//配置每秒2次的中断唤醒
 
@@ -151,11 +156,11 @@ void loop()
 	//ADCSRA = 1;
 	/********业务代码开始*********/
 	getSensors();
-	//Serial.println("Loop");
 	generateBitmap();
-	outputStat();
-	delay(2);
+	//outputStat();
+	//delay(1);
 	updateStrip();
+	
 	/********业务代码结束*********/
 	/**********节能器*************/
 
@@ -258,18 +263,26 @@ void updateStrip() {
 
 	if ((!flag && !rise && !drop && !lamp1.stat) || (flag && !rise && !drop && !IR && !lamp1.stat)) {
 		//Serial.println("NOP");
+		
 	}//nop
 	else if (flag && (IR || rise)) {
+
+		digitalWrite(PIN, LOW);
+		delay(1);
 		lamp1.lightUp();
 		//Serial.println("Lightup");
 	}
 	else if (!flag && drop && lamp1.stat) {
 		lamp1.shutDown();
+		delay(1);
+		digitalWrite(PIN, HIGH);
+		
 		//Serial.println("Shutdown");
 	}
 	else if (flag && !IR && lamp1.stat) {
 		if (!lamp1.ttl) {
 			lamp1.dimDown();
+			
 			//Serial.println("dimDown");
 		}
 		else {
