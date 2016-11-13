@@ -129,7 +129,7 @@ void setup()
 {
 	//Serial.begin(115200);
 
-	pinMode(A0, INPUT_PULLUP);//light
+	pinMode(A0, INPUT_PULLUP);//lightsensor
 	pinMode(IR_PIN,INPUT_PULLUP);
 	pinMode(NEO_SWITCH, OUTPUT);//neo power
 	pinMode(PIN, INPUT);//neo data
@@ -157,18 +157,21 @@ void loop()
 	/********业务代码开始*********/
 	getSensors();
 	generateBitmap();
+
 	//outputStat();
+	//Serial.println(ADCSRA, BIN);
 	//delay(1);
+
 	updateStrip();
 	
 	/********业务代码结束*********/
 	/**********节能器*************/
 
-	//ADCSRA = 0;										// disable ADC	
+	ADCSRA = 0;										// disable ADC	
 	MCUSR = 0;										// clear various "reset" flags	
 	WDTCSR = bit(WDCE) | bit(WDE);					// allow changes, disable reset
 													// set interrupt mode and an interval 
-	WDTCSR = bit(WDIE) | bit(WDP2) | bit(WDP0);		// set WDIE, and 8 seconds delay
+	WDTCSR = bit(WDIE) | bit(WDP2) | bit(WDP0);		// set WDIE, and 0.5 seconds delay
 	wdt_reset();									// pat the dog
 
 	set_sleep_mode(SLEEP_MODE_PWR_DOWN);
@@ -184,6 +187,7 @@ void loop()
 	// cancel sleep as a precaution
 	sleep_disable();
 	/*********节能器结束**********/
+	ADCSRA = 0b10010111;							//|= bit(ADSC);  // start conversion
 }
 
 void getSensors() {
