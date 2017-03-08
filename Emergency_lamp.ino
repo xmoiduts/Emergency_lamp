@@ -10,7 +10,7 @@
 #define PIN 11							//NeoPixel data Pin
 #define IR_PIN A3						//IR sensor Pin
 #define NEO_SWITCH 12
-#define NUM_LEDS 4
+#define NUM_LEDS 8
 #define BRIGHTNESS 255
 
 #define DARKER_TO_IGNITE 350   			//When light value **falls** below this value , lamp will light up ;
@@ -27,7 +27,7 @@ public:
 	float k_red, k_green, k_blue;			//For white balance . if LED outputs (255,255,255),the "white" is unconfortable.
 	int redmax, greenmax, bluemax;			//255*k_color  for each color
 	int ttl;
-	lamp(int timetolive, float a = 1.0, float b = 0.7, float c = 0.4) :ttl(timetolive), k_red(a), k_green(b), k_blue(c)
+	lamp(int timetolive, float a = 1.0, float b = 0.55, float c = 0.4) :ttl(timetolive), k_red(a), k_green(b), k_blue(c)
 		//
 	{
 		strip = Adafruit_NeoPixel(NUM_LEDS, PIN, NEO_GRB + NEO_KHZ800);
@@ -46,7 +46,7 @@ public:
 					cur_green++;
 				else if (cur_blue <bluemax)
 					cur_blue++;
-				for (int j = 0; j < 4; j++) {
+				for (int j = 0; j < NUM_LEDS; j++) {
 					strip.setPixelColor(j, strip.Color(cur_red, cur_green, cur_blue));
 				}
 				strip.show();
@@ -57,7 +57,7 @@ public:
 		else {
 			digitalWrite(NEO_SWITCH, HIGH);//ctrl pin
 			for (int i = 0; i < 256; i++) {
-				for (int j = 0; j < 4; j++) {
+				for (int j = 0; j < NUM_LEDS; j++) {
 					strip.setPixelColor(j, strip.Color(i*k_red, i*k_green, i*k_blue));
 				}
 				strip.show();
